@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 const MUAPI_BASE = 'https://api.muapi.ai';
 
 function getApiKey(request) {
+    const serverKey = (process.env.MUAPI_API_KEY?.trim() || process.env.TestKey?.trim());
+    if (serverKey) return serverKey;
     const headerKey = request.headers.get('x-api-key');
     if (headerKey) return headerKey;
     // Cookie-based auth removed for security (CWE-522)
