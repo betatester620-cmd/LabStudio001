@@ -10,7 +10,6 @@ const DesignAgentStudio = dynamic(() => import('studio').then(mod => mod.DesignA
   loading: () => <div className="h-full w-full bg-black flex items-center justify-center text-white/20">Loading Design Studio...</div>
 });
 import axios from 'axios';
-import ApiKeyModal from './ApiKeyModal';
 import { getCommonCopy, getLocaleConfig, localizeStudioPath } from '@/lib/locales';
 
 // Tab/category ids, icons, and English `label` fallbacks are stable
@@ -266,7 +265,7 @@ const getNavigationCategory = (tabId) => (
   NAVIGATION_CATEGORIES.find((category) => category.tabIds.includes(tabId))
 );
 
-const STORAGE_KEY = 'muapi_key';
+const SERVER_MANAGED_API_KEY = 'server-managed';
 const NOTIFICATIONS_STORAGE_KEY = 'open_gen_notifications_v1';
 const MAX_VISIBLE_NOTIFICATIONS = 3;
 
@@ -342,6 +341,7 @@ export default function StandaloneShell({ locale = 'en' }) {
   };
   
   const [apiKey, setApiKey] = useState(null);
+  const [serverKeyConfigured, setServerKeyConfigured] = useState(null);
   const [activeTab, setActiveTab] = useState(getInitialTab());
 
   const [balance, setBalance] = useState(null);
@@ -575,29 +575,26 @@ export default function StandaloneShell({ locale = 'en' }) {
   }, [activeTab]);
 
   useEffect(() => {
+    let cancelled = false;
     setHasMounted(true);
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      setApiKey(stored);
-      fetchBalance(stored);
-      // Sync cookie immediately on mount to establish identity for background requests
-      document.cookie = `muapi_key=${stored}; path=/; max-age=31536000; SameSite=Lax`;
-    }
+    // Only a non-secret status is returned to the browser. The real key stays server-side.
+    fetch('/api/config', { cache: 'no-store' })
+      .then((response) => {
+        if (!response.ok) throw new Error('Unable to read LabStudio configuration');
+        return response.json();
+      })
+      .then((config) => {
+        if (cancelled) return;
+        const configured = Boolean(config?.muapiConfigured);
+        setServerKeyConfigured(configured);
+        if (configured) {
+          setApiKey(SERVER_MANAGED_API_KEY);
+          void fetchBalance(SERVER_MANAGED_API_KEY);
+        }
+      })
+      .catch(() => { if (!cancelled) setServerKeyConfigured(false); });
+    return () => { cancelled = true; };
   }, [fetchBalance]);
-
-  const handleKeySave = useCallback((key) => {
-    localStorage.setItem(STORAGE_KEY, key);
-    setApiKey(key);
-    fetchBalance(key);
-    document.cookie = `muapi_key=${key}; path=/; max-age=31536000; SameSite=Lax`;
-  }, [fetchBalance]);
-
-  const handleKeyChange = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY);
-    setApiKey(null);
-    setBalance(null);
-    document.cookie = "muapi_key=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-  }, []);
 
   // Inject API key into all outgoing Axios requests (prop-based approach)
   // We use an interceptor to be selective and NOT send the key to external domains like S3
@@ -669,14 +666,27 @@ export default function StandaloneShell({ locale = 'en' }) {
     setDroppedFiles(null);
   }, []);
 
-  if (!hasMounted) return (
+  if (!hasMounted || serverKeyConfigured === null) return (
     <div className="min-h-screen bg-[#050505] flex items-center justify-center">
       <div className="animate-spin text-[#22d3ee] text-3xl">◌</div>
     </div>
   );
 
-  if (!apiKey) {
-    return <ApiKeyModal onSave={handleKeySave} locale={locale} />;
+  if (!serverKeyConfigured) {
+    return (
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center px-6 text-white">
+        <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#0a0a0b] p-8 shadow-2xl">
+          <div className="mb-5 flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-[#22d3ee] to-[#a855f7] text-black font-black">LS</div>
+            <div className="text-xl font-bold tracking-tight">LabStudio</div>
+          </div>
+          <h1 className="text-lg font-semibold">LabStudio is almost ready</h1>
+          <p className="mt-2 text-sm leading-6 text-white/60">
+            The owner needs to add a server-side environment variable named <code className="rounded bg-white/10 px-1.5 py-0.5 text-[#22d3ee]">MUAPI_API_KEY</code> in Vercel, then redeploy. Visitors do not need to enter an API key.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -773,17 +783,19 @@ export default function StandaloneShell({ locale = 'en' }) {
               </div>
             </div>
 
-            {/* Logo & Title */}
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 bg-[#22d3ee] rounded-lg flex items-center justify-center shadow-lg shadow-[#22d3ee]/20">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+            {/* LabStudio brand */}
+            <a href={studioPath('image')} onClick={(event) => handleNavigationItemClick(event, 'image')} aria-label="LabStudio home" className="group flex items-center gap-2.5 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#22d3ee]">
+              <div className="relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-[#111116] shadow-[0_0_22px_rgba(34,211,238,0.12)] transition-transform duration-200 group-hover:scale-105">
+                <div className="absolute inset-0 bg-gradient-to-br from-[#22d3ee]/25 via-transparent to-[#a855f7]/35" />
+                <svg className="relative" width="25" height="25" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+                  <defs><linearGradient id="labstudio-mark" x1="4" y1="4" x2="28" y2="28" gradientUnits="userSpaceOnUse"><stop stopColor="#22D3EE" /><stop offset="1" stopColor="#A855F7" /></linearGradient></defs>
+                  <path d="M16 3.5 3.5 10.2 16 17l12.5-6.8L16 3.5Z" stroke="url(#labstudio-mark)" strokeWidth="2.2" strokeLinejoin="round"/>
+                  <path d="m3.5 16 12.5 6.8L28.5 16M3.5 21.8 16 28.5l12.5-6.7" stroke="url(#labstudio-mark)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <circle cx="16" cy="16" r="2.1" fill="#fff"/>
                 </svg>
               </div>
-              <span className="text-sm font-bold tracking-tight hidden sm:block text-white">
-                {copy.shell.brand}
-              </span>
-            </div>
+              <span className="hidden text-[15px] font-extrabold tracking-tight text-white sm:block">Lab<span className="bg-gradient-to-r from-[#22d3ee] to-[#a855f7] bg-clip-text text-transparent">Studio</span></span>
+            </a>
           </div>
 
           {/* Active Tab Breadcrumb Badge */}
@@ -1181,31 +1193,11 @@ export default function StandaloneShell({ locale = 'en' }) {
               {copy.settingsModal.subtitle}
             </p>
 
-            <div className="space-y-4 mb-8">
-              <div className="bg-white/5 border border-white/[0.03] rounded-md p-4">
-                <label className="block text-xs font-bold text-white/30 mb-2">
-                   {copy.settingsModal.activeApiKey}
-                </label>
-                <div className="text-[13px] font-mono text-white/80">
-                  {apiKey.slice(0, 8)}••••••••••••••••
-                </div>
-              </div>
+            <div className="mb-8 rounded-xl border border-[#22d3ee]/15 bg-[#22d3ee]/5 p-4">
+              <div className="flex items-center gap-2 text-sm font-semibold text-white"><span className="h-2 w-2 rounded-full bg-emerald-400" />LabStudio server connection</div>
+              <p className="mt-2 text-xs leading-5 text-white/50">Your Muapi credentials are managed securely by LabStudio and are not stored in this browser.</p>
             </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={handleKeyChange}
-                className="flex-1 h-10 rounded-md bg-red-500/10 text-red-400 hover:bg-red-500/20 text-xs font-semibold transition-all"
-              >
-                {copy.settingsModal.changeKey}
-              </button>
-              <button
-                onClick={() => setShowSettings(false)}
-                className="flex-1 h-10 rounded-md bg-white/5 text-white/80 hover:bg-white/10 text-xs font-semibold transition-all border border-white/5"
-              >
-                {copy.settingsModal.close}
-              </button>
-            </div>
+            <button onClick={() => setShowSettings(false)} className="h-10 w-full rounded-md border border-white/5 bg-white/5 text-xs font-semibold text-white/80 transition-all hover:bg-white/10">{copy.settingsModal.close}</button>
           </div>
         </div>
       )}
