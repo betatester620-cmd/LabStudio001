@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 const MUAPI_BASE = 'https://api.muapi.ai';
 
 function getApiKey(request) {
-    const serverKey = process.env.MUAPI_API_KEY?.trim();
+    const serverKey = (process.env.MUAPI_API_KEY?.trim() || process.env.TestKey?.trim());
     if (serverKey) return serverKey;
     // Only accept x-api-key header. Cookie-based auth is removed for security:
     // cookies without HttpOnly flag can be stolen by any XSS (CWE-522).
