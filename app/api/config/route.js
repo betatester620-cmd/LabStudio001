@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   return NextResponse.json(
-    { muapiConfigured: Boolean(process.env.MUAPI_API_KEY?.trim()) },
+    { muapiConfigured: Boolean(process.env.MUAPI_API_KEY?.trim() || process.env.TestKey?.trim()) },
     { headers: { 'Cache-Control': 'no-store, max-age=0' } },
   );
 }
