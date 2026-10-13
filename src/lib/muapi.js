@@ -3,14 +3,14 @@ import { pollForGenerationResult } from '../../packages/studio/src/utils/generat
 
 export class MuapiClient {
     constructor() {
-        // Ideally user provides this in settings
-        this.baseUrl = (typeof import.meta !== 'undefined' && import.meta.env?.DEV) ? '' : 'https://api.muapi.ai';
+        // Use the same-origin proxy in every environment so the secret never reaches the browser.
+        this.baseUrl = '/api';
     }
 
     getKey() {
-        const key = window.__MUAPI_KEY__ || localStorage.getItem('muapi_key');
-        if (!key) throw new Error('API Key missing. Please set it in Settings.');
-        return key;
+        // This placeholder is not a credential. The server proxy replaces it with
+        // the deployment secret before forwarding the request to Muapi.
+        return 'server-managed';
     }
 
     /**
