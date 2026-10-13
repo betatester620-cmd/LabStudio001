@@ -90,6 +90,8 @@ function isAllowedS3Host(hostname) {
 
 export function getApiKeyFromRequest(request) {
     if (!request || !request.headers) return null;
+    const serverKey = process.env.MUAPI_API_KEY?.trim();
+    if (serverKey) return serverKey;
     const authHeader = request.headers.get('Authorization');
     if (authHeader && authHeader.startsWith('Bearer ')) {
         const token = authHeader.substring(7).trim();
